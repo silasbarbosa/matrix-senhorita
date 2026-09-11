@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matrix — A Senhorita está preparada?</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: block;
+  }
+  #rainCanvas { z-index: 1; }
+  #textCanvas { z-index: 2; }
+
+  /* ---------- Botões SIM / NÃO ---------- */
+  .choice-container {
+    position: absolute;
+    top: 62%;
+    left: 50%;
+    transform: translate(-50%, 0);
+    z-index: 3;
+    display: flex;
+    gap: 5vw;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.9s ease;
+  }
+  .choice-container.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .matrix-btn {
+    background: transparent;
+    border: 2px solid #00e065;
+    color: #00e065;
+    font-family: "Courier New", Consolas, monospace;
+    font-weight: bold;
+    font-size: 1.4rem;
+    letter-spacing: 3px;
+    padding: 14px 42px;
+    cursor: pointer;
+    text-shadow: 0 0 8px #00e065;
+    box-shadow: 0 0 12px rgba(0, 224, 101, 0.4);
+    transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease,
+                opacity 0.8s ease, transform 0.8s ease;
+  }
+  .matrix-btn:hover,
+  .matrix-btn:focus-visible {
+    background: #00e065;
+    color: #000;
+    box-shadow: 0 0 26px rgba(0, 224, 101, 0.9);
+    outline: none;
+  }
+  /* botão NÃO destacado da flexbox para poder fugir livremente pela viewport */
+  .matrix-btn.evading {
+    position: absolute;
+    z-index: 4;
+    transition: left 0.15s ease-out, top 0.15s ease-out;
+  }
+  /* dissolução (fade + encolhimento) ao clicar em SIM */
+  .matrix-btn.btn-fade-out {
+    opacity: 0 !important;
+    transform: scale(0.8);
+    pointer-events: none;
+  }
+
+  /* ---------- Imagem final + pílulas ---------- */
+  .reveal-group {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3vh;
+    max-height: 92vh;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 2s ease;
+  }
+  .reveal-group.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .reveal-image {
+    display: block;
+    max-width: min(90vw, 1200px);
+    max-height: 68vh;
+    width: auto;
+    height: auto;
+    /* mescla as bordas da foto com o fundo Matrix por trás dela */
+    -webkit-mask-image: radial-gradient(circle, black 60%, transparent 100%);
+    mask-image: radial-gradient(circle, black 60%, transparent 100%);
+    filter: drop-shadow(0 0 30px rgba(0, 224, 101, 0.35));
+  }
+  .pill-container {
+    display: flex;
+    gap: 4vw;
+  }
+  .destiny-title {
+    margin: 0;
+    font-family: "Courier New", Consolas, monospace;
+    font-weight: bold;
+    font-size: clamp(1rem, 2.4vw, 1.6rem);
+    letter-spacing: 4px;
+    color: #eafff0;
+    text-shadow: 0 0 10px #00e065, 0 0 22px rgba(0, 224, 101, 0.6);
+    text-align: center;
+  }
+  .pill-btn {
+    --pill-color: #00e065;
+    background: transparent;
+    border: 2px solid var(--pill-color);
+    color: var(--pill-color);
+    font-family: "Courier New", Consolas, monospace;
+    font-weight: bold;
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+    padding: 12px 34px;
+    cursor: pointer;
+    text-shadow: 0 0 8px var(--pill-color);
+    box-shadow: 0 0 12px var(--pill-color);
+    transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .pill-btn:hover,
+  .pill-btn:focus-visible {
+    background: var(--pill-color);
+    color: #000;
+    box-shadow: 0 0 24px var(--pill-color);
+    outline: none;
+  }
+  .pill-btn.pill-blue { --pill-color: #2f8dff; }
+  .pill-btn.pill-red  { --pill-color: #ff3b3b; }
+  .reveal-title {
+    margin: 0;
+    color: #eafff0;
+    font-family: "Courier New", Consolas, monospace;
+    font-weight: bold;
+    font-size: clamp(1.1rem, 3vw, 2rem);
+    letter-spacing: 3px;
+    text-align: center;
+    text-shadow: 0 0 10px #00e065, 0 0 22px rgba(0, 224, 101, 0.6);
+  }
+
+  /* ---------- Flash bang (pílula azul) ---------- */
+  .flash-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #ffffff;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 20;
+  }
+  .flash-overlay.flash-active {
+    animation: flashBang 3s ease-out forwards;
+  }
+  @keyframes flashBang {
+    0%   { opacity: 0; }
+    8%   { opacity: 1; }
+    45%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* ---------- Granada (aparece bem no instante do clarão) ---------- */
+  .grenade-image {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 40%;
+    height: auto;
+    transform: translate(-50%, -50%) scale(0.4);
+    z-index: 21;
+    opacity: 0;
+    pointer-events: none;
+    filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.7));
+  }
+  .grenade-image.grenade-active {
+    animation: grenadePulse 1.0s ease-out forwards;
+  }
+  @keyframes grenadePulse {
+    0%   { opacity: 1; transform: translate(-50%, -50%) scale(0.4) rotate(0deg); }
+    35%  { opacity: 1; transform: translate(-50%, -50%) scale(1.2) rotate(18deg); }
+    60%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-10deg); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.6) rotate(0deg); }
+  }
+
+  /* ---------- Figurinhas / vídeos espalhados ---------- */
+  .sticker-field {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 6;
+    pointer-events: none;
+  }
+  .sticker-item {
+    position: absolute;
+    border-radius: 10px;
+    box-shadow: 0 0 18px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    animation: stickerFade 0.6s ease forwards;
+  }
+  @keyframes stickerFade {
+    to { opacity: 1; }
+  }
+
+  /* ---------- Tela pós-explosão ("a verdade") ---------- */
+  .truth-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8vh 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1.2s ease;
+  }
+  .truth-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ---------- Convite (pílula vermelha) ---------- */
+  .invite-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2.5vh;
+    padding: 6vh 5vw;
+    overflow-y: auto;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1.2s ease;
+  }
+  .invite-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .invite-text {
+    margin: 0;
+    max-width: 720px;
+    color: #eafff0;
+    font-family: "Courier New", Consolas, monospace;
+    font-weight: bold;
+    font-size: clamp(0.9rem, 2.2vw, 1.5rem);
+    letter-spacing: 1.5px;
+    line-height: 1.6;
+    text-align: center;
+    text-transform: uppercase;
+    text-shadow: 0 0 8px #00e065, 0 0 18px rgba(0, 224, 101, 0.5);
+  }
+  .invite-media-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2vw;
+  }
+  .invite-media-row video,
+  .invite-media-row img {
+    width: 160px;
+    height: 160px;
+    object-fit: cover;
+    border-radius: 10px;
+    box-shadow: 0 0 18px rgba(0, 224, 101, 0.4);
+  }
+  .invite-flank-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3vw;
+    flex-wrap: wrap;
+  }
+  .invite-flank-row video,
+  .invite-flank-row img {
+    width: 110px;
+    height: 110px;
+    object-fit: cover;
+    border-radius: 10px;
+    box-shadow: 0 0 18px rgba(0, 224, 101, 0.4);
+    flex-shrink: 0;
+  }
+  a.matrix-btn {
+    display: inline-block;
+    text-decoration: none;
+  }
+  #btnConfirmPresence {
+    position: relative;
+    z-index: 10;
+  }
+  .fixed-center-video {
+    display: block;
+    width: min(50vw, 420px);
+    max-height: 55vh;
+    height: auto;
+    border-radius: 10px;
+    box-shadow: 0 0 24px rgba(0, 224, 101, 0.5);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="rainCanvas"></canvas>
+<canvas id="textCanvas"></canvas>
+
+<div id="choiceContainer" class="choice-container">
+  <button id="btnSim" class="matrix-btn" type="button">SIM</button>
+  <button id="btnNao" class="matrix-btn" type="button">NÃO</button>
+</div>
+
+<div id="revealGroup" class="reveal-group">
+  <h2 class="reveal-title">ESCOLHA SABIAMENTE O SEU DESTINO</h2>
+  <img id="revealImage" class="reveal-image" src="src/figurinhas/Gemini_Generated_Image_k4s38wk4s38wk4s3.jpg" alt="Imagem revelada">
+  <div class="pill-container">
+    <button id="btnPillBlue" class="pill-btn pill-blue" type="button">PÍLULA AZUL</button>
+    <button id="btnPillRed" class="pill-btn pill-red" type="button">PÍLULA VERMELHA</button>
+  </div>
+</div>
+
+<!-- Clarão da explosão ao escolher a pílula azul -->
+<div id="flashOverlay" class="flash-overlay"></div>
+
+<!-- Granada, exibida bem no momento do clarão -->
+<!-- Substitua 'src/figurinhas/granada.png' pelo nome real da sua imagem -->
+<img id="grenadeImg" class="grenade-image" src="src/figurinhas/granada.png" alt="Granada">
+
+<!-- Som da explosão — substitua 'src/audios/explosao.mp3' pelo nome real do seu arquivo -->
+<audio id="explosionSound" src="src/audios/explosao.mp3" preload="auto"></audio>
+
+<!-- Música de fundo ao escolher a pílula vermelha -->
+<audio id="inviteMusic" src="src/audios/forro.mp3" preload="auto" loop></audio>
+
+<!-- Figurinhas e vídeos espalhados pela tela após a explosão -->
+<div id="stickerField" class="sticker-field"></div>
+
+<!-- Tela exibida após o clarão -->
+<div id="truthOverlay" class="truth-overlay">
+  <h2 class="reveal-title">NÃO QUER SABER A VERDADE?</h2>
+  <button id="btnRestart" class="matrix-btn" type="button">FAZER ESCOLHA CERTA</button>
+</div>
+
+<!-- Tela exibida ao escolher a pílula vermelha -->
+<div id="inviteOverlay" class="invite-overlay">
+  <h2 class="reveal-title">VOCÊ FEZ A ESCOLHA CERTA</h2>
+  <div class="invite-flank-row">
+    <!-- Troque pelo nome real do seu vídeo, na mesma pasta do HTML -->
+    <video src="src/videos/danca.mp4" autoplay muted loop playsinline></video>
+    <p class="invite-text">
+      A senhorita está convocada para comparecer ao bambarê às 21 horas na data de 11/09/2026,
+      teremos danças extremamente gostosas e sua presença melhorará a minha noite em 1000%.
+    </p>
+    <img src="src/figurinhas/feliz.jpeg" alt="Figurinha">
+  </div>
+  <video class="fixed-center-video" src="src/videos/fixo.mp4" autoplay muted loop playsinline></video>
+  <div class="invite-media-row">
+    <!-- Figurinha restante -->
+    <img src="src/figurinhas/feliz-1.jpeg" alt="Figurinha">
+  </div>
+  <div class="invite-flank-row">
+    <img src="src/figurinhas/feliz-2.jpeg" alt="Figurinha">
+    <!-- Troque o href abaixo pelo link real de confirmação -->
+    <a id="btnConfirmPresence" class="matrix-btn" href="http://wa.me/5531992242159" target="_blank" rel="noopener noreferrer">CONFIRMAR PRESENÇA</a>
+    <img src="src/figurinhas/feliz-3.jpeg" alt="Figurinha">
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =========================================================
+     CONFIGURAÇÃO GERAL
+  ========================================================= */
+  const rainCanvas = document.getElementById('rainCanvas');
+  const rctx = rainCanvas.getContext('2d');
+  const textCanvas = document.getElementById('textCanvas');
+  const tctx = textCanvas.getContext('2d');
+
+  let W = 0, H = 0;
+
+  function resizeCanvases() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    rainCanvas.width = W;
+    rainCanvas.height = H;
+    textCanvas.width = W;
+    textCanvas.height = H;
+    initRain();
+  }
+
+  /* =========================================================
+     1) MATRIX DIGITAL RAIN (fundo, contínuo — nunca para)
+  ========================================================= */
+  const RAIN_FONT = 18;
+  const RAIN_GLYPHS =
+    "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン" +
+    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-*/=<>[]{}";
+
+  let drops = [];
+
+  function initRain() {
+    const columns = Math.ceil(W / RAIN_FONT);
+    // cada coluna começa numa altura negativa aleatória, para que a
+    // "primeira cascata" desça de forma escalonada até preencher a tela
+    drops = new Array(columns).fill(0).map(() => -Math.floor(Math.random() * (H / RAIN_FONT)));
+  }
+
+  function drawRain() {
+    // leve transparência preta por cima do frame anterior => cria o rastro
+    rctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
+    rctx.fillRect(0, 0, W, H);
+
+    rctx.font = RAIN_FONT + 'px monospace';
+    rctx.textAlign = 'left';
+    rctx.textBaseline = 'top';
+
+    for (let i = 0; i < drops.length; i++) {
+      const glyph = RAIN_GLYPHS[(Math.random() * RAIN_GLYPHS.length) | 0];
+      const x = i * RAIN_FONT;
+      const y = drops[i] * RAIN_FONT;
+
+      // caractere da "ponta" mais brilhante, resto em verde matrix
+      rctx.fillStyle = Math.random() > 0.975 ? '#c9ffcf' : '#00e065';
+      rctx.fillText(glyph, x, y);
+
+      if (y > H && Math.random() > 0.975) {
+        drops[i] = -Math.floor(Math.random() * 20); // volta ao topo, aleatoriamente
+      }
+      drops[i]++;
+    }
+  }
+
+  const RAIN_FRAME_MS = 33;
+
+  function timeForFirstFill() {
+    // tempo aproximado (ms) para uma coluna atravessar toda a altura da tela —
+    // usado como gatilho para só então iniciar o texto
+    const framesToCross = Math.ceil(H / RAIN_FONT);
+    return framesToCross * RAIN_FRAME_MS + 600; // + folga para "assentar"
+  }
+
+  /* =========================================================
+     2) e 3) TEXTO PALAVRA-A-PALAVRA COM "MATRIX DISSOLVE"
+  ========================================================= */
+  const PHRASE = ["A", "SENHORITA", "ESTÁ", "PREPARADA?"];
+
+  const TEXT_FONT_SIZE = () => Math.max(28, Math.min(64, Math.floor(W / 14)));
+  const STAGGER_MS = 45;      // atraso entre o início da animação de cada caractere
+  const CHAR_ANIM_MS = 550;   // duração da transição de cada caractere
+  const HOLD_MS = 1100;       // tempo em que a palavra fica estável na tela
+  const GAP_MS = 250;         // pausa em branco entre uma palavra e outra
+
+  let wordIndex = 0;
+  let phase = 'idle';         // 'form' | 'hold' | 'dissolve' | 'gap' | 'idle'
+  let phaseStart = 0;
+  let chars = [];
+  let fontSize = TEXT_FONT_SIZE();
+  let finalWordReached = false;  // true assim que 'PREPARADA?' termina de se formar
+  let endingSequence = false;    // true quando o SIM foi aceito e vamos dissolver de vez
+  let onSequenceEnd = null;      // callback disparado ao fim da dissolução final
+
+  function randGlyph() {
+    return RAIN_GLYPHS[(Math.random() * RAIN_GLYPHS.length) | 0];
+  }
+
+  function fontString() {
+    return 'bold ' + fontSize + 'px "Courier New", Consolas, monospace';
+  }
+
+  function setupWord(word) {
+    fontSize = TEXT_FONT_SIZE();
+    tctx.font = fontString();
+    const charWidth = tctx.measureText('A').width;
+    const totalWidth = charWidth * word.length;
+    const startX = W / 2 - totalWidth / 2;
+    const y = H / 2;
+
+    chars = word.split('').map((ch, i) => ({
+      finalChar: ch,
+      x: startX + i * charWidth + charWidth / 2,
+      y: y
+    }));
+  }
+
+  function phaseDuration(ph) {
+    switch (ph) {
+      case 'form':
+      case 'dissolve':
+        return (chars.length - 1) * STAGGER_MS + CHAR_ANIM_MS;
+      case 'hold':
+        // na última palavra, o "hold" nunca termina sozinho: o texto fica
+        // estável na tela aguardando a escolha do usuário nos botões
+        return finalWordReached ? Infinity : HOLD_MS;
+      case 'gap':
+        return GAP_MS;
+      default:
+        return 0;
+    }
+  }
+
+  function startForm() {
+    setupWord(PHRASE[wordIndex]);
+    phase = 'form';
+    phaseStart = performance.now();
+  }
+
+  function advancePhase() {
+    if (phase === 'form') {
+      phase = 'hold';
+      if (wordIndex === PHRASE.length - 1) {
+        // 'PREPARADA?' acabou de se formar: para o ciclo e revela os botões
+        finalWordReached = true;
+        showChoiceButtons();
+      }
+    } else if (phase === 'hold') {
+      if (finalWordReached) return; // aguardando ação do usuário, não avança mais
+      phase = 'dissolve';
+    } else if (phase === 'dissolve') {
+      if (endingSequence) {
+        // dissolução final (pós-clique em SIM): limpa tudo e não reinicia o ciclo
+        phase = 'idle';
+        tctx.clearRect(0, 0, W, H);
+        if (typeof onSequenceEnd === 'function') {
+          const cb = onSequenceEnd;
+          onSequenceEnd = null;
+          cb();
+        }
+        return;
+      }
+      phase = 'gap';
+    } else if (phase === 'gap') {
+      wordIndex = (wordIndex + 1) % PHRASE.length;
+      startForm();
+      return;
+    }
+    phaseStart = performance.now();
+  }
+
+  function drawChar(glyph, x, y, color, alpha) {
+    tctx.save();
+    tctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    tctx.fillStyle = color;
+    tctx.font = fontString();
+    tctx.textAlign = 'center';
+    tctx.textBaseline = 'middle';
+    tctx.shadowColor = '#00ff66';
+    tctx.shadowBlur = 12;
+    tctx.fillText(glyph, x, y);
+    tctx.restore();
+  }
+
+  // Formação: caractere "cai" de cima, ciclando glifos aleatórios, e se
+  // assenta no caractere final da palavra.
+  function drawFormingChar(c, p) {
+    const fallOffset = (1 - p) * 140;
+    const y = c.y - fallOffset;
+    let glyph, color;
+
+    if (p < 0.55) {
+      glyph = randGlyph();
+      color = Math.random() > 0.5 ? '#00e065' : '#8fffb0';
+    } else if (p < 0.85) {
+      glyph = Math.random() < 0.35 ? randGlyph() : c.finalChar;
+      color = '#c9ffcf';
+    } else {
+      glyph = c.finalChar;
+      color = '#eafff0';
+    }
+    const alpha = Math.min(1, p * 1.6);
+    drawChar(glyph, c.x, y, color, alpha);
+  }
+
+  // Dissolução: o caractere final vira glifos aleatórios que caem e somem.
+  function drawDissolvingChar(c, p) {
+    const fallOffset = p * p * 170;
+    const y = c.y + fallOffset;
+    const glyph = p < 0.12 ? c.finalChar : randGlyph();
+    const color = p < 0.3 ? '#eafff0' : '#00e065';
+    const alpha = 1 - p;
+    drawChar(glyph, c.x, y, color, alpha);
+  }
+
+  function drawHoldingChar(c) {
+    // leve "cintilação" ocasional para manter a estética matrix mesmo parado
+    const glyph = Math.random() < 0.015 ? randGlyph() : c.finalChar;
+    drawChar(glyph, c.x, c.y, '#eafff0', 1);
+  }
+
+  function textLoop(now) {
+    requestAnimationFrame(textLoop);
+    if (phase === 'idle') return;
+
+    tctx.clearRect(0, 0, W, H);
+
+    const elapsed = now - phaseStart;
+
+    if (phase === 'form') {
+      chars.forEach((c, i) => {
+        const p = clamp01((elapsed - i * STAGGER_MS) / CHAR_ANIM_MS);
+        drawFormingChar(c, p);
+      });
+    } else if (phase === 'hold') {
+      chars.forEach(drawHoldingChar);
+    } else if (phase === 'dissolve') {
+      chars.forEach((c, i) => {
+        const p = clamp01((elapsed - i * STAGGER_MS) / CHAR_ANIM_MS);
+        drawDissolvingChar(c, p);
+      });
+    }
+    // 'gap' -> tela de texto limpa, apenas a chuva de fundo aparece
+
+    if (elapsed >= phaseDuration(phase)) {
+      advancePhase();
+    }
+  }
+
+  function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+  }
+
+  /* =========================================================
+     4), 5) e 6) INTERAÇÃO DO USUÁRIO — botões SIM / NÃO
+  ========================================================= */
+  function showChoiceButtons() {
+    document.getElementById('choiceContainer').classList.add('visible');
+  }
+
+  function setupChoiceListeners() {
+    const btnSim = document.getElementById('btnSim');
+    const btnNao = document.getElementById('btnNao');
+    const container = document.getElementById('choiceContainer');
+    let naoDetached = false; // controla se o NÃO já saiu do fluxo normal do layout
+
+    /* ---- 5) Comportamento evasivo do botão NÃO ---- */
+    function dodgeCursor() {
+      if (!naoDetached) {
+        // na primeira fuga, tira o botão do container flex e o prende
+        // diretamente ao <body>: assim 'absolute' fica relativo à janela
+        // inteira (viewport), e não ao container centralizado
+        const rect = btnNao.getBoundingClientRect();
+        document.body.appendChild(btnNao);
+        btnNao.style.left = rect.left + 'px';
+        btnNao.style.top = rect.top + 'px';
+        btnNao.classList.add('evading');
+        naoDetached = true;
+        void btnNao.offsetWidth; // força reflow antes da próxima transição
+      }
+
+      const maxLeft = Math.max(0, window.innerWidth - btnNao.offsetWidth);
+      const maxTop = Math.max(0, window.innerHeight - btnNao.offsetHeight);
+      const randomLeft = Math.random() * maxLeft;
+      const randomTop = Math.random() * maxTop;
+
+      btnNao.style.left = randomLeft + 'px';
+      btnNao.style.top = randomTop + 'px';
+    }
+
+    btnNao.addEventListener('mouseover', dodgeCursor);
+
+    /* ---- 6) Comportamento de aceite do botão SIM ---- */
+    function handleSimAccept() {
+      btnSim.disabled = true;
+      btnNao.disabled = true;
+
+      // dissolve visualmente os dois botões (fade + leve encolhimento)
+      btnSim.classList.add('btn-fade-out');
+      btnNao.classList.add('btn-fade-out');
+
+      // dissolve também a palavra 'PREPARADA?' ainda congelada na tela,
+      // reaproveitando o mesmo efeito "matrix dissolve" do texto
+      endingSequence = true;
+      onSequenceEnd = revealImage;
+      phase = 'dissolve';
+      phaseStart = performance.now();
+
+      const BUTTON_FADE_MS = 800;
+      setTimeout(() => {
+        btnSim.remove();
+        btnNao.remove();
+        if (container && container.parentNode) container.remove();
+      }, BUTTON_FADE_MS);
+    }
+
+    btnSim.addEventListener('click', handleSimAccept);
+  }
+
+  /* =========================================================
+     7) e 8) EXIBIÇÃO DA IMAGEM + PÍLULAS (fade-in + blend com o Matrix)
+  ========================================================= */
+  function revealImage() {
+    const group = document.getElementById('revealGroup');
+    void group.offsetWidth; // garante que o navegador registre o estado inicial (opacity: 0)
+    group.classList.add('visible');
+  }
+
+  function setupPillListeners() {
+    document.getElementById('btnPillBlue').addEventListener('click', handleBluePillChoice);
+    document.getElementById('btnPillRed').addEventListener('click', handleRedPillChoice);
+    document.getElementById('btnRestart').addEventListener('click', restartChoice);
+  }
+
+  /* =========================================================
+     9) PÍLULA AZUL — flash bang + "a verdade" + figurinhas soltas
+  ========================================================= */
+  // Nomes de arquivo provisórios — troque pelos nomes reais das suas
+  // figurinhas/vídeos (todos na mesma pasta do HTML, ou ajuste o caminho).
+  const STICKER_IMAGES = [
+    'src/figurinhas/1.jpeg', 'src/figurinhas/2.jpeg', 'src/figurinhas/3.jpeg', 'src/figurinhas/4.jpeg', 'src/figurinhas/7.jpeg',
+    'src/figurinhas/8.jpeg', 'src/figurinhas/9.jpeg', 'src/figurinhas/10.jpeg', 'src/figurinhas/12.jpeg',
+    'src/figurinhas/14.jpeg', 'src/figurinhas/15.jpeg', 'src/figurinhas/16.jpeg'
+  ];
+  const STICKER_VIDEOS = ['src/videos/video-01.mp4', 'src/videos/video-02.mp4'];
+
+  function triggerFlashBang() {
+    const flash = document.getElementById('flashOverlay');
+    flash.classList.remove('flash-active');
+    void flash.offsetWidth; // reinicia a animação caso já tenha rodado antes
+    flash.classList.add('flash-active');
+  }
+
+  function triggerGrenade() {
+    const grenade = document.getElementById('grenadeImg');
+    grenade.classList.remove('grenade-active');
+    void grenade.offsetWidth; // reinicia a animação caso já tenha rodado antes
+    grenade.classList.add('grenade-active');
+  }
+
+  // Diagnóstico temporário: avisa no console se "granada.png" não carregar
+  // (nome/local errado) e confirma no console quando ela carrega com sucesso.
+  // Pode remover este bloco depois de confirmar que a imagem está ok.
+  (function debugGrenadeLoad() {
+    const grenade = document.getElementById('grenadeImg');
+    grenade.addEventListener('error', () => {
+      console.error(
+        '[matrix-senhorita] Falha ao carregar "' + grenade.getAttribute('src') + '". ' +
+        'Confira: 1) o arquivo se chama exatamente "granada.png" (minúsculas, sem espaços); ' +
+        '2) ele está na MESMA pasta deste .html; ' +
+        '3) a extensão é realmente .png (não .jpg/.jpeg/.webp).'
+      );
+    });
+    grenade.addEventListener('load', () => {
+      console.log('[matrix-senhorita] "granada.png" carregou com sucesso. Se ainda não a vê na tela, lembre-se: ela só aparece por uma fração de segundo (0.6s) no exato momento do clarão, ao clicar na pílula azul.');
+    });
+  })();
+
+  function playExplosionSound() {
+    const audio = document.getElementById('explosionSound');
+    audio.currentTime = 0;
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      // alguns navegadores podem bloquear o autoplay de áudio; como o disparo
+      // vem de um clique do usuário (gesto), isso normalmente é permitido
+      playPromise.catch(() => {});
+    }
+  }
+
+  function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  // Calcula a faixa vertical livre entre o título e o botão "recomeçar",
+  // para que as figurinhas fiquem sempre abaixo de um e acima do outro
+  function getStickerArea() {
+    const title = document.querySelector('#truthOverlay .reveal-title');
+    const button = document.getElementById('btnRestart');
+    const titleRect = title.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+
+    const verticalGap = 24;
+    const sideMargin = 24;
+    const top = titleRect.bottom + verticalGap;
+    const bottom = buttonRect.top - verticalGap;
+    const left = sideMargin;
+    const right = window.innerWidth - sideMargin;
+
+    return {
+      top: top,
+      left: left,
+      width: Math.max(80, right - left),
+      height: Math.max(80, bottom - top)
+    };
+  }
+
+  function populateStickerField() {
+    const field = document.getElementById('stickerField');
+    field.innerHTML = ''; // limpa antes de sortear novas posições
+
+    const items = [
+      ...STICKER_IMAGES.map(src => ({ type: 'image', src })),
+      ...STICKER_VIDEOS.map(src => ({ type: 'video', src }))
+    ];
+    const n = items.length;
+    const area = getStickerArea();
+
+    // divide a área livre numa grade adaptada à sua proporção, com células
+    // suficientes para todos os itens — cada um fica preso à sua própria
+    // célula, então nunca há sobreposição entre eles
+    let cols = Math.max(1, Math.round(Math.sqrt((n * area.width) / area.height)));
+    let rows = Math.ceil(n / cols);
+    while (cols * rows < n) {
+      cols++;
+      rows = Math.ceil(n / cols);
+    }
+
+    const cellWidth = area.width / cols;
+    const cellHeight = area.height / rows;
+    const cellPadding = 10;
+
+    // embaralha quais células cada item ocupa, pra não parecer uma grade fixa
+    const cellIndexes = shuffleArray(
+      Array.from({ length: cols * rows }, (_, i) => i)
+    ).slice(0, n);
+
+    items.forEach((item, i) => {
+      let el;
+      if (item.type === 'image') {
+        el = document.createElement('img');
+        el.src = item.src;
+        el.alt = 'Figurinha';
+      } else {
+        el = document.createElement('video');
+        el.src = item.src;
+        el.autoplay = true;
+        el.muted = true;
+        el.loop = true;
+        el.playsInline = true;
+      }
+      el.className = 'sticker-item';
+
+      const cellIndex = cellIndexes[i];
+      const col = cellIndex % cols;
+      const row = Math.floor(cellIndex / cols);
+      const cellLeft = area.left + col * cellWidth;
+      const cellTop = area.top + row * cellHeight;
+
+      // tamanho limitado ao espaço da própria célula (garante zero sobreposição)
+      const maxSize = Math.max(36, Math.min(cellWidth, cellHeight) - cellPadding * 2);
+      const size = maxSize * (0.7 + Math.random() * 0.3);
+
+      const freeX = Math.max(0, cellWidth - size - cellPadding * 2);
+      const freeY = Math.max(0, cellHeight - size - cellPadding * 2);
+      const posLeft = cellLeft + cellPadding + Math.random() * freeX;
+      const posTop = cellTop + cellPadding + Math.random() * freeY;
+
+      el.style.width = size + 'px';
+      el.style.left = posLeft + 'px';
+      el.style.top = posTop + 'px';
+
+      // rotação leve — mantida pequena para não "vazar" da célula
+      const rotation = (Math.random() * 16 - 8).toFixed(1);
+      el.style.transform = 'rotate(' + rotation + 'deg)';
+      el.style.animationDelay = (Math.random() * 0.6).toFixed(2) + 's';
+
+      field.appendChild(el);
+    });
+  }
+
+  /* =========================================================
+     10) PÍLULA VERMELHA — revela o convite
+  ========================================================= */
+  function fadeInAudio(audio, durationMs, targetVolume) {
+    const STEPS = 30;
+    const stepTime = durationMs / STEPS;
+    let step = 0;
+    audio.volume = 0;
+    const fadeInterval = setInterval(() => {
+      step++;
+      audio.volume = Math.min(targetVolume, (step / STEPS) * targetVolume);
+      if (step >= STEPS) clearInterval(fadeInterval);
+    }, stepTime);
+  }
+
+  function playInviteMusic() {
+    const music = document.getElementById('inviteMusic');
+    music.currentTime = 0;
+    music.volume = 0;
+    const playPromise = music.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      // alguns navegadores podem bloquear o autoplay de áudio; como o disparo
+      // vem de um clique do usuário (gesto), isso normalmente é permitido
+      playPromise.catch(() => {});
+    }
+    fadeInAudio(music, 1500, 1); // sobe gradualmente até o volume máximo em 1.5s
+  }
+
+  function handleRedPillChoice() {
+    document.getElementById('revealGroup').classList.remove('visible');
+    document.getElementById('inviteOverlay').classList.add('visible');
+    playInviteMusic();
+  }
+
+  function handleBluePillChoice() {
+    triggerGrenade();
+    triggerFlashBang();
+    playExplosionSound();
+
+    // esconde a imagem + título + pílulas imediatamente (fica coberto pelo clarão)
+    document.getElementById('revealGroup').classList.remove('visible');
+
+    // no auge do clarão (tela ainda bem branca), troca o conteúdo por baixo,
+    // criando um "corte seco" que só aparece conforme o flash se apaga
+    setTimeout(() => {
+      populateStickerField();
+      document.getElementById('truthOverlay').classList.add('visible');
+    }, 400);
+  }
+
+  function restartChoice() {
+    // some com a tela da verdade e limpa as figurinhas espalhadas
+    document.getElementById('truthOverlay').classList.remove('visible');
+    document.getElementById('stickerField').innerHTML = '';
+
+    // volta a exibir imagem + título + pílulas, para uma nova escolha
+    document.getElementById('revealGroup').classList.add('visible');
+  }
+
+  /* =========================================================
+     LOOP DA CHUVA + INICIALIZAÇÃO
+  ========================================================= */
+  function start() {
+    resizeCanvases();
+    setupChoiceListeners();
+    setupPillListeners();
+    setInterval(drawRain, RAIN_FRAME_MS);        // chuva roda para sempre, independente de tudo
+    requestAnimationFrame(textLoop);
+
+    // Gatilho: só inicia o texto depois que a primeira cascata "encher" a tela
+    setTimeout(startForm, timeForFirstFill());
+  }
+
+  window.addEventListener('resize', resizeCanvases);
+  window.addEventListener('load', start);
+})();
+</script>
+</body>
+</html>
